@@ -1,3 +1,5 @@
+import math
+import typing
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 import uuid
 import aiofiles
@@ -9,9 +11,18 @@ from pydub import AudioSegment
 from tflite_support.task import audio
 from tflite_support.task import core
 from tflite_support.task import processor
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+import orjson
 import os
 
-app = FastAPI()
+class ORJSONResponse(JSONResponse):
+    media_type = "application/json"
+
+    def render(self, content: typing.Any) -> bytes:
+        return orjson.dumps(content)
+
+app = FastAPI(default_response_class=ORJSONResponse)
 
 @app.get("/")
 def health_check():
@@ -45,11 +56,26 @@ def stereo2mono(filename):
     mono_left = mono_audios[0].export(filename.replace('.wav', '_left.wav'), format="wav")
     return filename.replace('.wav', '_left.wav')
 
+def nan_to_none(value):
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    else:
+        return value
+
+def check_extension(filename: str, valid_exts = ["mov", "mp4", "m4a", "3gp", "3g2", "mj2"]
+):
+    ext = os.path.splitext(filename)[-1][1:].lower()
+    if ext not in valid_exts:
+        return False
+    return True
+
 @app.post("/predict")
 async def get_file(file: UploadFile = File(...), keyword=Query('')):
     if len(file.filename) <= 0:
         raise HTTPException(status_code=400, detail="File not found")
-    
+    valid_exts = ["mov", "mp4", "m4a", "3gp", "3g2", "mj2"]
+    if not check_extension(file.filename, valid_exts):
+        raise HTTPException(status_code=400, detail=f"Invalid file extension. Must be one of {valid_exts}")
     filename = str(uuid.uuid4()) + file.filename
     filename = 'src/data/' + str(filename)
     async with aiofiles.open(filename, 'wb') as out_file:
@@ -78,7 +104,10 @@ async def get_file(file: UploadFile = File(...), keyword=Query('')):
     os.remove(mp4_audio_path)
     os.remove(wav_audio_path)
 
-    return audio_result
+    print(audio_result)
+    print("//////////////////////////")
+    print(jsonable_encoder(audio_result, exclude_none=True))
+    return jsonable_encoder(audio_result, exclude_none=True)
 
 if __name__ == "__main__":
     import uvicorn

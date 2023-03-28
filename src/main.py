@@ -38,10 +38,13 @@ def mp4_2_wav(filename):
     """
     # convert mp4 to wav
     wav_file_path = filename.replace('.mp4', '.wav')
+    new_sample_rate = 44100
     
     sound = AudioSegment.from_file(filename, format="mp4")
-    new_sample_rate = 44100
-    sound = sound.set_frame_rate(new_sample_rate)
+    sound = sound.set_channels(1)  # Convert to mono
+    sound = sound.set_frame_rate(new_sample_rate) # Set Sample Rate. 
+    sound = sound.set_sample_width(2) # Convert to 16-bit
+    
     sound.export(wav_file_path, format="wav")
     num_channels = sound.channels
     return wav_file_path, num_channels
